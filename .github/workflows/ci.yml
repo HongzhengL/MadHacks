@@ -1,0 +1,36 @@
+name: CI
+
+on:
+    pull_request:
+    push:
+        branches:
+            - main
+
+permissions:
+    contents: read
+
+jobs:
+    lint-and-format:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: npm
+
+            - name: Install dependencies
+              run: npm install
+
+            - name: Check formatting
+              run: npm run format:check
+
+            - name: Run linters
+              run: npm run lint:all
+
+            - name: Run tests
+              run: npm run test:all
