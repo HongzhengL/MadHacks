@@ -10,8 +10,15 @@ const columns = [
 
 export function KanbanBoard({ tasks, onMoveTask, onAssignBill, onRemoveBill }) {
     return (
-        <div className="flex-1 overflow-x-auto bg-gray-50">
-            <div className="h-full flex gap-4 p-6 min-w-max">
+        <div className="flex-1 overflow-auto bg-gray-50">
+            <div
+                className="h-full gap-4 p-6"
+                style={{
+                    display: 'grid',
+                    gridTemplateColumns: `repeat(${columns.length}, minmax(220px, 1fr))`,
+                    alignItems: 'start',
+                }}
+            >
                 {columns.map((column) => {
                     const columnTasks = tasks.filter((task) => task.status === column.id);
                     return (

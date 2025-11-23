@@ -28,7 +28,7 @@ export function KanbanColumn({ column, tasks, onMoveTask, onAssignBill, onRemove
     };
 
     return (
-        <div className="w-72 flex flex-col">
+        <div className="flex flex-col" style={{ minWidth: 0 }}>
             <div className={`px-4 py-3 rounded-t-lg border-2 ${getHeaderColor()}`}>
                 <div className="flex items-center justify-between">
                     <span>{column.title}</span>
