@@ -334,23 +334,26 @@ export function FinanceKanban({ config, summary }) {
 
     const openHousingModal = () => setShowHousingModal(true);
     const closeHousingModal = () => setShowHousingModal(false);
-    const withdrawFromSavings = (taskId) => {
+    const withdrawFromSavings = (taskId, amount) => {
         setFinanceState((prev) => {
             const target = prev.tasks.find((task) => task.id === taskId);
             const balance = target?.accountBalance ?? 0;
-            if (!target || balance <= 0) {
+            const requested = Math.max(0, Math.min(balance, Math.round(Number(amount) || balance)));
+            if (!target || balance <= 0 || requested <= 0) {
                 return prev;
             }
 
             const updatedTasks = prev.tasks.map((task) =>
-                task.id === taskId ? { ...task, accountBalance: 0, assignedBills: [] } : task
+                task.id === taskId
+                    ? { ...task, accountBalance: balance - requested, assignedBills: [] }
+                    : task
             );
 
             return {
                 ...prev,
                 tasks: updatedTasks,
-                availableAmount: prev.availableAmount + balance,
-                savingsBalance: 0,
+                availableAmount: prev.availableAmount + requested,
+                savingsBalance: Math.max(0, Math.round(prev.savingsBalance - requested)),
             };
         });
     };
@@ -481,7 +484,7 @@ export function FinanceKanban({ config, summary }) {
             const nextQuality = Math.max(0, qualityOfLife + qolDelta);
 
             // Savings/Investments growth
-            const savingsInterest = prev.savingsBalance * SAVINGS_INTEREST_RATE;
+            const savingsInterest = prev.availableAmount * SAVINGS_INTEREST_RATE;
             const investmentReturnRate =
                 Math.random() * (INVESTMENT_MAX_RETURN - INVESTMENT_MIN_RETURN) +
                 INVESTMENT_MIN_RETURN;
