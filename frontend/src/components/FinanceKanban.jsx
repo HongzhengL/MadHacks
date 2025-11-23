@@ -165,6 +165,7 @@ export function FinanceKanban({ config, summary }) {
                 ...prev,
                 tasks: updatedTasks,
                 creditRemaining: creditRemaining - appliedValue,
+                availableAmount: prev.availableAmount - appliedValue,
             };
         });
     };
