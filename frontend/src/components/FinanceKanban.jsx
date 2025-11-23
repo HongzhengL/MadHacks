@@ -2,66 +2,59 @@ import { useState } from 'react';
 import { KanbanHeader } from './KanbanHeader';
 import { BillsPool } from './BillsPool';
 import { KanbanBoard } from './KanbanBoard';
+import { defaultFinanceConfig } from '../config/financeConfig';
 
-const PAYCHECK_AMOUNT = 500; // TODO: Should be configurable
+export function FinanceKanban({ config }) {
+    const resolvedConfig = config ?? defaultFinanceConfig;
+    const {
+        initialWeek = 1,
+        paycheckAmount = 500,
+        startingBalance,
+        creditLimit,
+        tasks: initialTasks = [],
+        bills: initialBills = [],
+    } = resolvedConfig;
 
-export function FinanceKanban() {
-    const [financeState, setFinanceState] = useState({
-        currentWeek: 1,
-        availableAmount: PAYCHECK_AMOUNT,
-        tasks: [
-            {
-                id: 'T1',
-                title: 'Rent Payment',
-                amount: 100,
-                dueWeek: 3,
-                assignedBills: [],
-                status: 'fixed',
-            },
-            {
-                id: 'T2',
-                title: 'Utilities',
-                amount: 50,
-                dueWeek: 2,
-                assignedBills: [],
-                status: 'fixed',
-            },
-            {
-                id: 'T3',
-                title: 'Groceries',
-                amount: 80,
-                dueWeek: 1,
-                assignedBills: [],
-                status: 'variable',
-            },
-            {
-                id: 'T4',
-                title: 'Internet Bill',
-                amount: 60,
-                dueWeek: 2,
-                assignedBills: [],
-                status: 'fixed',
-            },
-            {
-                id: 'T5',
-                title: 'Phone Bill',
-                amount: 40,
-                dueWeek: 1,
-                assignedBills: [],
-                status: 'fixed',
-            },
-        ],
+    const derivedCreditLimit =
+        creditLimit ?? initialBills.find((bill) => bill.type === 'credit')?.value ?? 0;
+
+    const [financeState, setFinanceState] = useState(() => {
+        const normalizedTasks = initialTasks.map((task) => ({
+            ...task,
+            assignedBills: task.assignedBills ? [...task.assignedBills] : [],
+        }));
+
+        const initialCreditUsed = normalizedTasks.reduce((sum, task) => {
+            const taskCredit = task.assignedBills
+                .filter((bill) => bill.type === 'credit')
+                .reduce((subSum, bill) => subSum + bill.value, 0);
+            return sum + taskCredit;
+        }, 0);
+
+        const startingCreditRemaining = Math.max(derivedCreditLimit - initialCreditUsed, 0);
+
+        return {
+            currentWeek: initialWeek,
+            availableAmount: startingBalance ?? paycheckAmount,
+            creditLimit: derivedCreditLimit,
+            creditRemaining: startingCreditRemaining,
+            tasks: normalizedTasks,
+        };
     });
 
-    const { currentWeek, availableAmount, tasks } = financeState;
+    const {
+        currentWeek,
+        availableAmount,
+        tasks,
+        creditRemaining,
+        creditLimit: creditCap,
+    } = financeState;
 
-    const [availableBills] = useState([
-        { id: 'b1', value: 100, type: 'cash' },
-        { id: 'b2', value: 50, type: 'cash' },
-        { id: 'b3', value: 10, type: 'cash' },
-        { id: 'b4', value: 1, type: 'cash' },
-        { id: 'cc1', value: 500, type: 'credit' },
-    ]);
+    const [availableBills] = useState(() =>
+        initialBills.map((bill) =>
+            bill.type === 'credit' ? { ...bill, value: derivedCreditLimit } : { ...bill }
+        )
+    );
 
     const moveTask = (taskId, newStatus) => {
         setFinanceState((prev) => ({
@@ -74,44 +67,78 @@ export function FinanceKanban() {
 
     const assignBillToTask = (billValue, billType, taskId) => {
         setFinanceState((prev) => {
-            if (billType === 'cash' && prev.availableAmount < billValue) {
+            const targetTask = prev.tasks.find((task) => task.id === taskId);
+            if (!targetTask) {
                 return prev;
             }
 
-            let taskFound = false;
-            const newBill = {
-                id: `${taskId}-${Date.now()}-${Math.random()}`,
-                value: billValue,
-                type: billType,
-            };
-
-            const updatedTasks = prev.tasks.map((task) => {
-                if (task.id !== taskId) {
-                    return task;
+            if (billType === 'cash') {
+                if (prev.availableAmount < billValue) {
+                    return prev;
                 }
 
-                taskFound = true;
-                return { ...task, assignedBills: [...task.assignedBills, newBill] };
-            });
+                const cashBill = {
+                    id: `${taskId}-cash-${Date.now()}-${Math.random()}`,
+                    value: billValue,
+                    type: 'cash',
+                };
 
-            if (!taskFound) {
+                const updatedTasks = prev.tasks.map((task) =>
+                    task.id === taskId
+                        ? { ...task, assignedBills: [...task.assignedBills, cashBill] }
+                        : task
+                );
+
+                return {
+                    ...prev,
+                    tasks: updatedTasks,
+                    availableAmount: prev.availableAmount - billValue,
+                };
+            }
+
+            const creditRemaining = prev.creditRemaining ?? 0;
+            const hasCreditAlready = targetTask.assignedBills.some(
+                (bill) => bill.type === 'credit'
+            );
+            if (hasCreditAlready || creditRemaining <= 0) {
                 return prev;
             }
 
-            const nextAvailable =
-                billType === 'cash' ? prev.availableAmount - billValue : prev.availableAmount;
+            const alreadyPaid = targetTask.assignedBills.reduce((sum, bill) => sum + bill.value, 0);
+            const remainingNeed = Math.max(targetTask.amount - alreadyPaid, 0);
+            if (remainingNeed <= 0) {
+                return prev;
+            }
+
+            const appliedValue = Math.min(creditRemaining, remainingNeed);
+            if (appliedValue <= 0) {
+                return prev;
+            }
+
+            const creditBill = {
+                id: `${taskId}-credit-${Date.now()}-${Math.random()}`,
+                value: appliedValue,
+                type: 'credit',
+            };
+
+            const updatedTasks = prev.tasks.map((task) =>
+                task.id === taskId
+                    ? { ...task, assignedBills: [...task.assignedBills, creditBill] }
+                    : task
+            );
 
             return {
                 ...prev,
                 tasks: updatedTasks,
-                availableAmount: nextAvailable,
+                creditRemaining: creditRemaining - appliedValue,
             };
         });
     };
 
     const removeBillFromTask = (billId, taskId) => {
         setFinanceState((prev) => {
-            let refund = 0;
+            let refundCash = 0;
+            let refundCredit = 0;
             let billRemoved = false;
 
             const updatedTasks = prev.tasks.map((task) => {
@@ -126,7 +153,10 @@ export function FinanceKanban() {
 
                     billRemoved = true;
                     if (bill.type === 'cash') {
-                        refund += bill.value;
+                        refundCash += bill.value;
+                    }
+                    if (bill.type === 'credit') {
+                        refundCredit += bill.value;
                     }
                     return false;
                 });
@@ -142,10 +172,17 @@ export function FinanceKanban() {
                 return prev;
             }
 
+            const creditCap = prev.creditLimit ?? Number.POSITIVE_INFINITY;
+            const nextCreditRemaining = Math.min(
+                creditCap,
+                (prev.creditRemaining ?? 0) + refundCredit
+            );
+
             return {
                 ...prev,
                 tasks: updatedTasks,
-                availableAmount: prev.availableAmount + refund,
+                availableAmount: prev.availableAmount + refundCash,
+                creditRemaining: nextCreditRemaining,
             };
         });
     };
@@ -154,19 +191,30 @@ export function FinanceKanban() {
         setFinanceState((prev) => ({
             ...prev,
             currentWeek: prev.currentWeek + 2,
-            availableAmount: prev.availableAmount + PAYCHECK_AMOUNT,
+            availableAmount: prev.availableAmount + paycheckAmount,
         }));
     };
+
+    const safeCreditRemaining = Math.max(creditRemaining ?? 0, 0);
+    const billsForDisplay = availableBills.map((bill) =>
+        bill.type === 'credit' ? { ...bill, value: safeCreditRemaining } : bill
+    );
 
     return (
         <div className="h-screen flex flex-col">
             <KanbanHeader
                 currentWeek={currentWeek}
                 availableAmount={availableAmount}
+                creditRemaining={creditRemaining}
+                creditLimit={creditCap}
                 onAdvanceWeek={advanceWeek}
             />
 
-            <BillsPool bills={availableBills} availableAmount={availableAmount} />
+            <BillsPool
+                bills={billsForDisplay}
+                availableAmount={availableAmount}
+                creditRemaining={creditRemaining}
+            />
 
             <KanbanBoard
                 tasks={tasks}

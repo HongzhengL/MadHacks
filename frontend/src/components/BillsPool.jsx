@@ -1,6 +1,6 @@
 import { BillCard } from './BillCard';
 
-export function BillsPool({ bills, availableAmount }) {
+export function BillsPool({ bills, availableAmount, creditRemaining }) {
     return (
         <div className="bg-blue-50 border-b border-blue-200 px-6 py-4">
             <div className="flex items-center gap-6">
@@ -21,7 +21,11 @@ export function BillsPool({ bills, availableAmount }) {
                         {bills
                             .filter((b) => b.type === 'credit')
                             .map((bill) => (
-                                <BillCard key={bill.id} bill={bill} />
+                                <BillCard
+                                    key={bill.id}
+                                    bill={bill}
+                                    disabled={(creditRemaining ?? 0) <= 0}
+                                />
                             ))}
                     </div>
                 </div>
