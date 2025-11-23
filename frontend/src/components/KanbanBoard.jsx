@@ -16,6 +16,8 @@ export function KanbanBoard({
     onChangeHousing,
     rentSurcharge,
     baseRent,
+    onWithdrawSavings,
+    onBorrowDebt,
 }) {
     return (
         <div className="flex-1 overflow-auto bg-gray-50">
@@ -40,6 +42,8 @@ export function KanbanBoard({
                             onChangeHousing={onChangeHousing}
                             rentSurcharge={rentSurcharge}
                             baseRent={baseRent}
+                            onWithdrawSavings={onWithdrawSavings}
+                            onBorrowDebt={onBorrowDebt}
                         />
                     );
                 })}

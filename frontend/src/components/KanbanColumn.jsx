@@ -10,6 +10,8 @@ export function KanbanColumn({
     onChangeHousing,
     rentSurcharge,
     baseRent,
+    onWithdrawSavings,
+    onBorrowDebt,
 }) {
     const [{ isOver }, drop] = useDrop(() => ({
         accept: 'task',
@@ -62,6 +64,8 @@ export function KanbanColumn({
                             onChangeHousing={onChangeHousing}
                             rentSurcharge={rentSurcharge}
                             baseRent={baseRent}
+                            onWithdrawSavings={onWithdrawSavings}
+                            onBorrowDebt={onBorrowDebt}
                         />
                     ))}
                 </div>

@@ -1,4 +1,4 @@
-import { DollarSign, CreditCard, Wallet, Home, Heart } from 'lucide-react';
+import { DollarSign, CreditCard, Wallet, Home, Heart, TrendingDown } from 'lucide-react';
 import { Button } from './ui/button';
 
 export function KanbanHeader({
@@ -7,6 +7,11 @@ export function KanbanHeader({
     creditRemaining,
     creditLimit,
     scenarioSummary,
+    qualityOfLife,
+    debt,
+    creditScore,
+    savingsBalance,
+    investmentBalance,
     onAdvanceWeek,
 }) {
     const difficultyLabel = scenarioSummary?.difficultyLabel;
@@ -39,6 +44,32 @@ export function KanbanHeader({
                             <span>
                                 Credit Limit: ${creditRemaining ?? 0}/
                                 {creditLimit ?? creditRemaining ?? 0}
+                            </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 px-4 py-2 bg-orange-50 rounded-lg border border-orange-200">
+                            <TrendingDown className="size-4 text-orange-600" />
+                            <span>Debt: ${debt ?? 0}</span>
+                        </div>
+
+                        <div className="flex items-center gap-2 px-4 py-2 bg-pink-50 rounded-lg border border-pink-200">
+                            <Heart className="size-4 text-pink-600" />
+                            <span>QoL: {qualityOfLife ?? '—'}</span>
+                        </div>
+
+                        <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 rounded-lg border border-gray-200">
+                            <span className="text-gray-700">
+                                Credit Score: {creditScore ?? '—'}
+                            </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-lg border border-slate-200">
+                            <span className="text-gray-700">Savings: ${savingsBalance ?? 0}</span>
+                        </div>
+
+                        <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-lg border border-slate-200">
+                            <span className="text-gray-700">
+                                Investments: ${investmentBalance ?? 0}
                             </span>
                         </div>
                     </div>

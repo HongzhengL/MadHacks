@@ -9,6 +9,8 @@ export function TaskCard({
     onChangeHousing,
     rentSurcharge = 0,
     baseRent,
+    onWithdrawSavings,
+    onBorrowDebt,
 }) {
     const [{ isDragging }, drag] = useDrag(() => ({
         type: 'task',
@@ -34,19 +36,33 @@ export function TaskCard({
     const rentBaseAmount =
         baseRent ?? (rentSurcharge > 0 ? Math.max(task.amount - rentSurcharge, 0) : task.amount);
     const displayAmount =
-        isRentTask && rentSurcharge > 0 ? `$${rentBaseAmount} + ${rentSurcharge}` : task.amount;
+        isRentTask && rentSurcharge > 0
+            ? `$${rentBaseAmount} + ${rentSurcharge}`
+            : task.category === 'savings'
+              ? `${Math.round(task.accountBalance ?? 0)}`
+              : task.category === 'debt'
+                ? `${-(task.accountBalance ?? 0)}`
+                : task.amount;
 
     return (
         <div
             ref={drag}
-            onContextMenu={
-                isRentTask && onChangeHousing
-                    ? (event) => {
-                          event.preventDefault();
-                          onChangeHousing();
-                      }
-                    : undefined
-            }
+            onContextMenu={(event) => {
+                if (isRentTask && onChangeHousing) {
+                    event.preventDefault();
+                    onChangeHousing();
+                    return;
+                }
+                if (task.category === 'savings' && onWithdrawSavings) {
+                    event.preventDefault();
+                    onWithdrawSavings(task.id);
+                    return;
+                }
+                if (task.category === 'debt' && onBorrowDebt) {
+                    event.preventDefault();
+                    onBorrowDebt(task.id);
+                }
+            }}
             className={`
         bg-yellow-50 border-2 border-yellow-300 rounded-lg p-3 cursor-move
         ${isDragging ? 'opacity-50' : 'opacity-100'}
@@ -61,14 +77,12 @@ export function TaskCard({
                 </div>
             </div>
 
-            <div className="flex items-center gap-1 text-gray-600 mb-3">
-                <Calendar className="size-4" />
-                {isRentTask ? (
-                    <span>Rent bills every 2 rounds</span>
-                ) : (
+            {task.dueWeek && task.category !== 'savings' && task.category !== 'debt' ? (
+                <div className="flex items-center gap-1 text-gray-600 mb-3">
+                    <Calendar className="size-4" />
                     <span>Due Week {task.dueWeek}</span>
-                )}
-            </div>
+                </div>
+            ) : null}
 
             <div
                 ref={drop}
@@ -92,13 +106,15 @@ export function TaskCard({
                 )}
             </div>
 
-            {task.assignedBills.length > 0 && (
-                <div
-                    className={`mt-2 text-center ${isFullyPaid ? 'text-green-600' : 'text-orange-600'}`}
-                >
-                    ${totalAssigned} / ${task.amount}
-                </div>
-            )}
+            {task.assignedBills.length > 0 &&
+                task.category !== 'savings' &&
+                task.category !== 'debt' && (
+                    <div
+                        className={`mt-2 text-center ${isFullyPaid ? 'text-green-600' : 'text-orange-600'}`}
+                    >
+                        ${totalAssigned} / ${task.amount}
+                    </div>
+                )}
         </div>
     );
 }

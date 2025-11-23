@@ -8,6 +8,14 @@ import { housingOptions, difficultyOptions } from '../config/scenarioConfig';
 import { randomTaskRules, randomTaskState } from '../config/randomEvents';
 
 const HOUSING_CHANGE_FEE = 200;
+const CREDIT_INTEREST_RATE = 0.02;
+const LATE_FEE = 25;
+const MAX_CREDIT_SCORE = 850;
+const MIN_CREDIT_SCORE = 300;
+const SAVINGS_INTEREST_RATE = 0.003; // 0.3% per round
+const INVESTMENT_MIN_RETURN = -0.05;
+const INVESTMENT_MAX_RETURN = 0.08;
+const DEBT_WITHDRAW_CHUNK = 200;
 
 export function FinanceKanban({ config, summary }) {
     const resolvedConfig = config ?? defaultFinanceConfig;
@@ -24,6 +32,10 @@ export function FinanceKanban({ config, summary }) {
         creditLimit ?? initialBills.find((bill) => bill.type === 'credit')?.value ?? 0;
 
     const getIsActiveForPeriod = (task, period) => {
+        if (task.category === 'savings' || task.category === 'debt') {
+            return true;
+        }
+
         if (task.frequency === 2) {
             return period % 2 === 0;
         }
@@ -53,6 +65,7 @@ export function FinanceKanban({ config, summary }) {
             ...task,
             assignedBills: task.assignedBills ? [...task.assignedBills] : [],
             isActive: getIsActiveForPeriod(task, initialPeriod),
+            accountBalance: task.accountBalance ?? 0,
         }));
 
         const initialCreditUsed = normalizedTasks.reduce((sum, task) => {
@@ -71,12 +84,19 @@ export function FinanceKanban({ config, summary }) {
             creditRemaining: startingCreditRemaining,
             tasks: normalizedTasks,
             roundIndex: 0,
+            savingsBalance:
+                normalizedTasks.find((t) => t.category === 'savings')?.accountBalance ?? 0,
+            investmentBalance: 0,
         };
     });
     const [scenarioSummary, setScenarioSummary] = useState(summary);
     const [showHousingModal, setShowHousingModal] = useState(false);
     const [rentSurcharge, setRentSurcharge] = useState(0);
     const [periodBaseHousingKey, setPeriodBaseHousingKey] = useState(summary?.housingKey);
+    const [qualityOfLife, setQualityOfLife] = useState(summary?.qolBaseline ?? 60);
+    const [debt, setDebt] = useState(summary?.startingDebt ?? 0);
+    const [creditScore, setCreditScore] = useState(summary?.creditScore ?? 680);
+    const [lastRoundSummary, setLastRoundSummary] = useState(null);
 
     const {
         currentWeek,
@@ -84,6 +104,8 @@ export function FinanceKanban({ config, summary }) {
         tasks,
         creditRemaining,
         creditLimit: creditCap,
+        savingsBalance,
+        investmentBalance,
     } = financeState;
 
     const [availableBills] = useState(() =>
@@ -129,6 +151,60 @@ export function FinanceKanban({ config, summary }) {
                         ...task,
                         assignedBills: nextAssigned,
                         lastPaidPeriod: paid ? currentPeriod : undefined,
+                    };
+                });
+
+                return {
+                    ...prev,
+                    tasks: updatedTasks,
+                    availableAmount: prev.availableAmount - billValue,
+                };
+            }
+
+            if (targetTask.category === 'savings') {
+                const updatedTasks = prev.tasks.map((task) => {
+                    if (task.id !== taskId) return task;
+                    const nextAssigned = [
+                        ...task.assignedBills,
+                        {
+                            id: `${taskId}-save-${Date.now()}-${Math.random()}`,
+                            value: billValue,
+                            type: 'cash',
+                        },
+                    ];
+                    const nextBalance = (task.accountBalance ?? 0) + billValue;
+                    return {
+                        ...task,
+                        assignedBills: nextAssigned,
+                        accountBalance: nextBalance,
+                    };
+                });
+
+                return {
+                    ...prev,
+                    tasks: updatedTasks,
+                    availableAmount: prev.availableAmount - billValue,
+                    savingsBalance: prev.savingsBalance + billValue,
+                };
+            }
+
+            if (targetTask.category === 'debt') {
+                const payAmount = Math.min(billValue, debt);
+                setDebt((d) => Math.max(0, d - payAmount));
+
+                const updatedTasks = prev.tasks.map((task) => {
+                    if (task.id !== taskId) return task;
+                    const nextAssigned = [
+                        ...task.assignedBills,
+                        {
+                            id: `${taskId}-debt-${Date.now()}-${Math.random()}`,
+                            value: billValue,
+                            type: 'cash',
+                        },
+                    ];
+                    return {
+                        ...task,
+                        assignedBills: nextAssigned,
                     };
                 });
 
@@ -224,6 +300,7 @@ export function FinanceKanban({ config, summary }) {
                     ...task,
                     assignedBills: filteredBills,
                     lastPaidPeriod: paid ? currentPeriod : undefined,
+                    accountBalance: task.category === 'savings' ? total : task.accountBalance,
                 };
             });
 
@@ -237,17 +314,54 @@ export function FinanceKanban({ config, summary }) {
                 (prev.creditRemaining ?? 0) + refundCredit
             );
 
+            const updatedSavingsTask = updatedTasks.find(
+                (task) => task.id === taskId && task.category === 'savings'
+            );
+            const nextSavingsBalance =
+                updatedSavingsTask && updatedSavingsTask.accountBalance !== undefined
+                    ? Math.round(updatedSavingsTask.accountBalance)
+                    : prev.savingsBalance;
+
             return {
                 ...prev,
                 tasks: updatedTasks,
                 availableAmount: prev.availableAmount + refundCash,
                 creditRemaining: nextCreditRemaining,
+                savingsBalance: nextSavingsBalance,
             };
         });
     };
 
     const openHousingModal = () => setShowHousingModal(true);
     const closeHousingModal = () => setShowHousingModal(false);
+    const withdrawFromSavings = (taskId) => {
+        setFinanceState((prev) => {
+            const target = prev.tasks.find((task) => task.id === taskId);
+            const balance = target?.accountBalance ?? 0;
+            if (!target || balance <= 0) {
+                return prev;
+            }
+
+            const updatedTasks = prev.tasks.map((task) =>
+                task.id === taskId ? { ...task, accountBalance: 0, assignedBills: [] } : task
+            );
+
+            return {
+                ...prev,
+                tasks: updatedTasks,
+                availableAmount: prev.availableAmount + balance,
+                savingsBalance: 0,
+            };
+        });
+    };
+
+    const borrowFromDebt = () => {
+        setDebt((d) => d + DEBT_WITHDRAW_CHUNK);
+        setFinanceState((prev) => ({
+            ...prev,
+            availableAmount: prev.availableAmount + DEBT_WITHDRAW_CHUNK,
+        }));
+    };
 
     const applyHousingChange = (newHousingKey) => {
         const housing = housingOptions[newHousingKey];
@@ -305,50 +419,156 @@ export function FinanceKanban({ config, summary }) {
     const advanceWeek = () => {
         setFinanceState((prev) => {
             const nextRoundIndex = (prev.roundIndex ?? 0) + 1;
-            const prevPeriod = prev.roundIndex ?? 0;
             const nextPeriod = nextRoundIndex;
 
-            let updatedTasks = prev.tasks;
+            // Settlement: evaluate tasks before reset
+            const settlement = prev.tasks.reduce(
+                (acc, task) => {
+                    if (task.category === 'savings' || task.category === 'debt') {
+                        return acc;
+                    }
+                    const totalPaid = task.assignedBills.reduce((sum, bill) => sum + bill.value, 0);
+                    const isPaid = totalPaid >= task.amount;
+                    const isFixed = task.status === 'fixed';
+                    const isVariable = task.status === 'variable';
+                    const isGoal = task.status === 'goal';
+                    const isOpportunity = task.status === 'opportunity';
 
-            if (nextPeriod !== prevPeriod) {
-                const rentTask = updatedTasks.find(
-                    (task) => task.category === 'rent' || task.id === 'T1'
-                );
-                const baseRent =
-                    scenarioSummary?.rentAmount ??
-                    (rentTask ? Math.max(rentTask.amount - rentSurcharge, 0) : 0);
+                    if (isPaid) {
+                        if (isFixed) acc.paidFixed += 1;
+                        if (isVariable) acc.paidVariable += 1;
+                        if (isGoal || isOpportunity) acc.paidGoals += 1;
+                    } else {
+                        if (isFixed) acc.unpaidFixed += 1;
+                        if (isVariable) acc.unpaidVariable += 1;
+                    }
+                    acc.spent += totalPaid;
+                    return acc;
+                },
+                {
+                    paidFixed: 0,
+                    unpaidFixed: 0,
+                    paidVariable: 0,
+                    unpaidVariable: 0,
+                    paidGoals: 0,
+                    spent: 0,
+                }
+            );
 
-                setRentSurcharge(0);
-                setPeriodBaseHousingKey(scenarioSummary?.housingKey ?? periodBaseHousingKey);
+            // QoL changes
+            const qolDelta =
+                settlement.paidGoals * 2 +
+                settlement.paidVariable * 1 -
+                settlement.unpaidFixed * 5 -
+                settlement.unpaidVariable * 3;
 
-                updatedTasks = prev.tasks.map((task) => {
-                    const isRentTask = task.category === 'rent' || task.id === 'T1';
-                    const nextIsActive = getIsActiveForPeriod(task, nextPeriod);
+            // Debt / credit score changes
+            const outstandingCredit = (prev.creditLimit ?? 0) - (prev.creditRemaining ?? 0);
+            const debtDelta =
+                outstandingCredit * CREDIT_INTEREST_RATE + settlement.unpaidFixed * LATE_FEE;
+            const nextDebt = Math.max(0, debt + debtDelta);
+            const nextCreditScore = Math.min(
+                MAX_CREDIT_SCORE,
+                Math.max(
+                    MIN_CREDIT_SCORE,
+                    creditScore -
+                        settlement.unpaidFixed * 10 -
+                        settlement.unpaidVariable * 5 +
+                        (settlement.unpaidFixed === 0 && settlement.unpaidVariable === 0 ? 2 : 0)
+                )
+            );
 
-                    const baseUpdate = {
+            const nextQuality = Math.max(0, qualityOfLife + qolDelta);
+
+            // Savings/Investments growth
+            const savingsInterest = prev.savingsBalance * SAVINGS_INTEREST_RATE;
+            const investmentReturnRate =
+                Math.random() * (INVESTMENT_MAX_RETURN - INVESTMENT_MIN_RETURN) +
+                INVESTMENT_MIN_RETURN;
+            const investmentDelta = prev.investmentBalance * investmentReturnRate;
+            const leftoverToSavings = Math.max(prev.availableAmount, 0);
+            const nextSavingsBalance = prev.savingsBalance + savingsInterest + leftoverToSavings;
+            const nextInvestmentBalance = prev.investmentBalance + investmentDelta;
+
+            const rentTask = prev.tasks.find(
+                (task) => task.category === 'rent' || task.id === 'T1'
+            );
+            const baseRent =
+                scenarioSummary?.rentAmount ??
+                (rentTask ? Math.max(rentTask.amount - rentSurcharge, 0) : 0);
+
+            setRentSurcharge(0);
+            setPeriodBaseHousingKey(scenarioSummary?.housingKey ?? periodBaseHousingKey);
+            setQualityOfLife(nextQuality);
+            setDebt(nextDebt);
+            setCreditScore(nextCreditScore);
+            setLastRoundSummary({
+                paidFixed: settlement.paidFixed,
+                unpaidFixed: settlement.unpaidFixed,
+                paidVariable: settlement.paidVariable,
+                unpaidVariable: settlement.unpaidVariable,
+                paidGoals: settlement.paidGoals,
+                qolDelta,
+                debtDelta: Math.round(debtDelta),
+                creditScoreAfter: nextCreditScore,
+                savingsInterest: Math.round(savingsInterest),
+                investmentDelta: Math.round(investmentDelta),
+                status:
+                    nextQuality <= 0
+                        ? 'Defeat: QoL collapsed'
+                        : nextDebt >= (scenarioSummary?.monthlyTakeHome ?? 0) * 12
+                          ? 'Defeat: Debt exceeded annual salary'
+                          : null,
+            });
+
+            let updatedTasks = prev.tasks.map((task) => {
+                const isRentTask = task.category === 'rent' || task.id === 'T1';
+                const nextIsActive = getIsActiveForPeriod(task, nextPeriod);
+
+                if (task.category === 'savings') {
+                    return {
                         ...task,
-                        isActive: nextIsActive,
+                        isActive: true,
+                        accountBalance: nextSavingsBalance,
                         assignedBills: [],
                         lastPaidPeriod: undefined,
                     };
+                }
 
-                    if (isRentTask) {
-                        return {
-                            ...baseUpdate,
-                            amount: baseRent,
-                        };
-                    }
+                if (task.category === 'debt') {
+                    return {
+                        ...task,
+                        isActive: true,
+                        assignedBills: [],
+                        lastPaidPeriod: undefined,
+                    };
+                }
 
-                    return baseUpdate;
-                });
-            }
+                const baseUpdate = {
+                    ...task,
+                    isActive: nextIsActive,
+                    assignedBills: [],
+                    lastPaidPeriod: undefined,
+                };
+
+                if (isRentTask) {
+                    return {
+                        ...baseUpdate,
+                        amount: baseRent,
+                    };
+                }
+
+                return baseUpdate;
+            });
 
             return {
                 ...prev,
                 currentWeek: prev.currentWeek + 2,
-                availableAmount: prev.availableAmount + paycheckAmount,
+                availableAmount: paycheckAmount,
                 roundIndex: nextRoundIndex,
                 tasks: updatedTasks,
+                savingsBalance: Math.round(nextSavingsBalance),
+                investmentBalance: nextInvestmentBalance,
             };
         });
     };
@@ -367,6 +587,11 @@ export function FinanceKanban({ config, summary }) {
                 creditRemaining={creditRemaining}
                 creditLimit={creditCap}
                 scenarioSummary={scenarioSummary}
+                qualityOfLife={qualityOfLife}
+                debt={debt}
+                creditScore={creditScore}
+                savingsBalance={savingsBalance}
+                investmentBalance={investmentBalance}
                 onAdvanceWeek={advanceWeek}
             />
 
@@ -384,7 +609,31 @@ export function FinanceKanban({ config, summary }) {
                 onChangeHousing={openHousingModal}
                 rentSurcharge={rentSurcharge}
                 baseRent={scenarioSummary?.rentAmount}
+                onWithdrawSavings={withdrawFromSavings}
+                onBorrowDebt={borrowFromDebt}
             />
+
+            {lastRoundSummary ? (
+                <div className="bg-white border-t border-gray-200 px-6 py-4">
+                    <div className="flex flex-wrap gap-4 text-sm text-gray-800">
+                        <div className="font-semibold text-gray-900">Last Round Summary</div>
+                        <div>Paid fixed: {lastRoundSummary.paidFixed}</div>
+                        <div>Missed fixed: {lastRoundSummary.unpaidFixed}</div>
+                        <div>Paid variable: {lastRoundSummary.paidVariable}</div>
+                        <div>Missed variable: {lastRoundSummary.unpaidVariable}</div>
+                        <div>QoL Δ: {lastRoundSummary.qolDelta}</div>
+                        <div>Debt Δ: ${lastRoundSummary.debtDelta}</div>
+                        <div>Credit score: {lastRoundSummary.creditScoreAfter}</div>
+                        <div>Savings interest: ${lastRoundSummary.savingsInterest}</div>
+                        <div>Investment return: ${lastRoundSummary.investmentDelta}</div>
+                    </div>
+                    {lastRoundSummary.status ? (
+                        <div className="mt-2 text-sm text-red-600 font-semibold">
+                            {lastRoundSummary.status}
+                        </div>
+                    ) : null}
+                </div>
+            ) : null}
 
             {showHousingModal ? (
                 <HousingChangeModal

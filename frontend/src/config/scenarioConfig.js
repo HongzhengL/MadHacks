@@ -10,6 +10,7 @@ export const difficultyOptions = {
         qualityOfLife: 48,
         creditScore: 640,
         startingDebt: 500,
+        startingSavings: 200,
         narrative: 'Entry-level salary in an expensive college town.',
     },
     medium: {
@@ -23,6 +24,7 @@ export const difficultyOptions = {
         qualityOfLife: 60,
         creditScore: 690,
         startingDebt: 250,
+        startingSavings: 500,
         narrative: 'Solid mid-career salary.',
     },
     easy: {
@@ -36,6 +38,7 @@ export const difficultyOptions = {
         qualityOfLife: 70,
         creditScore: 720,
         startingDebt: 0,
+        startingSavings: 1000,
         narrative: 'Well-paid tech/finance/management role.',
     },
 };
@@ -118,6 +121,28 @@ const baseTasks = [
         status: 'fixed',
         frequency: 2,
     },
+    {
+        id: 'SAVINGS',
+        title: 'Savings Account',
+        amount: 0,
+        dueWeek: 1,
+        assignedBills: [],
+        status: 'goal',
+        frequency: 1,
+        category: 'savings',
+        accountBalance: 0,
+    },
+    {
+        id: 'DEBT',
+        title: 'Debt Account',
+        amount: 0,
+        dueWeek: 1,
+        assignedBills: [],
+        status: 'goal',
+        frequency: 1,
+        category: 'debt',
+        accountBalance: 0,
+    },
 ];
 
 const billDenominations = [
@@ -150,6 +175,12 @@ export function buildScenarioConfig({
                 assignedBills: [],
             };
         }
+        if (task.id === 'SAVINGS') {
+            return { ...task, assignedBills: [], accountBalance: difficulty.startingSavings ?? 0 };
+        }
+        if (task.id === 'DEBT') {
+            return { ...task, assignedBills: [], accountBalance: difficulty.startingDebt ?? 0 };
+        }
         return { ...task, assignedBills: [] };
     });
 
@@ -175,6 +206,7 @@ export function buildScenarioConfig({
         creditScore: difficulty.creditScore,
         creditLimit,
         startingDebt: difficulty.startingDebt,
+        startingSavings: difficulty.startingSavings ?? 0,
         narrative: difficulty.narrative,
         housingDescription: housing.description,
     };
