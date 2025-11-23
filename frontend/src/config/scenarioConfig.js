@@ -80,6 +80,7 @@ const baseTasks = [
         assignedBills: [],
         status: 'fixed',
         category: 'rent',
+        frequency: 2,
     },
     {
         id: 'T2',
@@ -88,6 +89,7 @@ const baseTasks = [
         dueWeek: 2,
         assignedBills: [],
         status: 'fixed',
+        frequency: 2,
     },
     {
         id: 'T3',
@@ -96,6 +98,7 @@ const baseTasks = [
         dueWeek: 1,
         assignedBills: [],
         status: 'variable',
+        frequency: 1,
     },
     {
         id: 'T4',
@@ -104,6 +107,7 @@ const baseTasks = [
         dueWeek: 2,
         assignedBills: [],
         status: 'fixed',
+        frequency: 2,
     },
     {
         id: 'T5',
@@ -112,6 +116,7 @@ const baseTasks = [
         dueWeek: 1,
         assignedBills: [],
         status: 'fixed',
+        frequency: 2,
     },
 ];
 

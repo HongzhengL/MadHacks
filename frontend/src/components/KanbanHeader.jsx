@@ -78,10 +78,6 @@ export function KanbanHeader({
                                 <span>QoL baseline: {qolBaseline}</span>
                             </div>
                         </div>
-                        <div className="text-xs text-gray-500">
-                            Rent bills every 2 rounds; housing changes add the $200 fee to that
-                            period&apos;s rent.
-                        </div>
                     </>
                 ) : null}
             </div>

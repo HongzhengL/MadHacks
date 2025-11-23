@@ -22,10 +22,22 @@ export function FinanceKanban({ config, summary }) {
     const derivedCreditLimit =
         creditLimit ?? initialBills.find((bill) => bill.type === 'credit')?.value ?? 0;
 
+    const getIsActiveForPeriod = (task, period) => {
+        if (task.frequency === 2) {
+            return period % 2 === 0;
+        }
+        if (task.frequency === -1) {
+            return Math.random() < 0.5;
+        }
+        return true;
+    };
+
     const [financeState, setFinanceState] = useState(() => {
+        const initialPeriod = 0;
         const normalizedTasks = initialTasks.map((task) => ({
             ...task,
             assignedBills: task.assignedBills ? [...task.assignedBills] : [],
+            isActive: getIsActiveForPeriod(task, initialPeriod),
         }));
 
         const initialCreditUsed = normalizedTasks.reduce((sum, task) => {
@@ -49,6 +61,7 @@ export function FinanceKanban({ config, summary }) {
     const [scenarioSummary, setScenarioSummary] = useState(summary);
     const [showHousingModal, setShowHousingModal] = useState(false);
     const [rentSurcharge, setRentSurcharge] = useState(0);
+    const [periodBaseHousingKey, setPeriodBaseHousingKey] = useState(summary?.housingKey);
 
     const {
         currentWeek,
@@ -76,9 +89,10 @@ export function FinanceKanban({ config, summary }) {
     const assignBillToTask = (billValue, billType, taskId) => {
         setFinanceState((prev) => {
             const targetTask = prev.tasks.find((task) => task.id === taskId);
-            if (!targetTask) {
+            if (!targetTask || targetTask.isActive === false) {
                 return prev;
             }
+            const currentPeriod = prev.roundIndex ?? 0;
 
             if (billType === 'cash') {
                 if (prev.availableAmount < billValue) {
@@ -91,11 +105,17 @@ export function FinanceKanban({ config, summary }) {
                     type: 'cash',
                 };
 
-                const updatedTasks = prev.tasks.map((task) =>
-                    task.id === taskId
-                        ? { ...task, assignedBills: [...task.assignedBills, cashBill] }
-                        : task
-                );
+                const updatedTasks = prev.tasks.map((task) => {
+                    if (task.id !== taskId) return task;
+                    const nextAssigned = [...task.assignedBills, cashBill];
+                    const total = nextAssigned.reduce((sum, bill) => sum + bill.value, 0);
+                    const paid = total >= task.amount;
+                    return {
+                        ...task,
+                        assignedBills: nextAssigned,
+                        lastPaidPeriod: paid ? currentPeriod : undefined,
+                    };
+                });
 
                 return {
                     ...prev,
@@ -129,11 +149,17 @@ export function FinanceKanban({ config, summary }) {
                 type: 'credit',
             };
 
-            const updatedTasks = prev.tasks.map((task) =>
-                task.id === taskId
-                    ? { ...task, assignedBills: [...task.assignedBills, creditBill] }
-                    : task
-            );
+            const updatedTasks = prev.tasks.map((task) => {
+                if (task.id !== taskId) return task;
+                const nextAssigned = [...task.assignedBills, creditBill];
+                const total = nextAssigned.reduce((sum, bill) => sum + bill.value, 0);
+                const paid = total >= task.amount;
+                return {
+                    ...task,
+                    assignedBills: nextAssigned,
+                    lastPaidPeriod: paid ? currentPeriod : undefined,
+                };
+            });
 
             return {
                 ...prev,
@@ -148,6 +174,8 @@ export function FinanceKanban({ config, summary }) {
             let refundCash = 0;
             let refundCredit = 0;
             let billRemoved = false;
+
+            const currentPeriod = prev.roundIndex ?? 0;
 
             const updatedTasks = prev.tasks.map((task) => {
                 if (task.id !== taskId) {
@@ -173,7 +201,14 @@ export function FinanceKanban({ config, summary }) {
                     return task;
                 }
 
-                return { ...task, assignedBills: filteredBills };
+                const total = filteredBills.reduce((sum, bill) => sum + bill.value, 0);
+                const paid = total >= task.amount;
+
+                return {
+                    ...task,
+                    assignedBills: filteredBills,
+                    lastPaidPeriod: paid ? currentPeriod : undefined,
+                };
             });
 
             if (!billRemoved) {
@@ -205,9 +240,10 @@ export function FinanceKanban({ config, summary }) {
             return;
         }
 
-        const nextSurcharge = rentSurcharge + HOUSING_CHANGE_FEE;
+        const revertingToPeriodBase = newHousingKey === periodBaseHousingKey;
+        const appliedSurcharge = revertingToPeriodBase ? 0 : HOUSING_CHANGE_FEE;
 
-        setRentSurcharge(nextSurcharge);
+        setRentSurcharge(appliedSurcharge);
 
         setFinanceState((prev) => {
             const updatedTasks = prev.tasks.map((task) => {
@@ -215,7 +251,7 @@ export function FinanceKanban({ config, summary }) {
                 if (!isRentTask) return task;
                 return {
                     ...task,
-                    amount: housing.rent + nextSurcharge,
+                    amount: housing.rent + appliedSurcharge,
                     title: `Rent (${housing.label})`,
                 };
             });
@@ -253,27 +289,41 @@ export function FinanceKanban({ config, summary }) {
     const advanceWeek = () => {
         setFinanceState((prev) => {
             const nextRoundIndex = (prev.roundIndex ?? 0) + 1;
-            const prevPeriod = Math.floor((prev.roundIndex ?? 0) / 2);
-            const nextPeriod = Math.floor(nextRoundIndex / 2);
+            const prevPeriod = prev.roundIndex ?? 0;
+            const nextPeriod = nextRoundIndex;
 
             let updatedTasks = prev.tasks;
 
             if (nextPeriod !== prevPeriod) {
+                const rentTask = updatedTasks.find(
+                    (task) => task.category === 'rent' || task.id === 'T1'
+                );
                 const baseRent =
                     scenarioSummary?.rentAmount ??
-                    updatedTasks.find((task) => task.category === 'rent' || task.id === 'T1')
-                        ?.amount ??
-                    0;
+                    (rentTask ? Math.max(rentTask.amount - rentSurcharge, 0) : 0);
 
                 setRentSurcharge(0);
+                setPeriodBaseHousingKey(scenarioSummary?.housingKey ?? periodBaseHousingKey);
 
                 updatedTasks = prev.tasks.map((task) => {
                     const isRentTask = task.category === 'rent' || task.id === 'T1';
-                    if (!isRentTask) return task;
-                    return {
+                    const nextIsActive = getIsActiveForPeriod(task, nextPeriod);
+
+                    const baseUpdate = {
                         ...task,
-                        amount: baseRent,
+                        isActive: nextIsActive,
+                        assignedBills: [],
+                        lastPaidPeriod: undefined,
                     };
+
+                    if (isRentTask) {
+                        return {
+                            ...baseUpdate,
+                            amount: baseRent,
+                        };
+                    }
+
+                    return baseUpdate;
                 });
             }
 
@@ -291,6 +341,7 @@ export function FinanceKanban({ config, summary }) {
     const billsForDisplay = availableBills.map((bill) =>
         bill.type === 'credit' ? { ...bill, value: safeCreditRemaining } : bill
     );
+    const activeTasks = tasks.filter((task) => task.isActive !== false);
 
     return (
         <div className="h-screen flex flex-col">
@@ -310,12 +361,13 @@ export function FinanceKanban({ config, summary }) {
             />
 
             <KanbanBoard
-                tasks={tasks}
+                tasks={activeTasks}
                 onMoveTask={moveTask}
                 onAssignBill={assignBillToTask}
                 onRemoveBill={removeBillFromTask}
                 onChangeHousing={openHousingModal}
-                housingChangeFee={HOUSING_CHANGE_FEE}
+                rentSurcharge={rentSurcharge}
+                baseRent={scenarioSummary?.rentAmount}
             />
 
             {showHousingModal ? (

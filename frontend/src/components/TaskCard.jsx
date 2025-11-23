@@ -2,7 +2,14 @@ import { useDrag, useDrop } from 'react-dnd';
 import { BillCard } from './BillCard';
 import { Calendar, DollarSign } from 'lucide-react';
 
-export function TaskCard({ task, onAssignBill, onRemoveBill, onChangeHousing }) {
+export function TaskCard({
+    task,
+    onAssignBill,
+    onRemoveBill,
+    onChangeHousing,
+    rentSurcharge = 0,
+    baseRent,
+}) {
     const [{ isDragging }, drag] = useDrag(() => ({
         type: 'task',
         item: { taskId: task.id },
@@ -24,6 +31,10 @@ export function TaskCard({ task, onAssignBill, onRemoveBill, onChangeHousing }) 
     const totalAssigned = task.assignedBills.reduce((sum, bill) => sum + bill.value, 0);
     const isFullyPaid = totalAssigned >= task.amount;
     const isRentTask = task.category === 'rent' || task.id === 'T1';
+    const rentBaseAmount =
+        baseRent ?? (rentSurcharge > 0 ? Math.max(task.amount - rentSurcharge, 0) : task.amount);
+    const displayAmount =
+        isRentTask && rentSurcharge > 0 ? `$${rentBaseAmount} + ${rentSurcharge}` : task.amount;
 
     return (
         <div
@@ -49,7 +60,7 @@ export function TaskCard({ task, onAssignBill, onRemoveBill, onChangeHousing }) 
                 </div>
                 <div className="flex items-center gap-1 text-gray-800">
                     <DollarSign className="size-4" />
-                    <span>{task.amount}</span>
+                    <span>{displayAmount}</span>
                 </div>
             </div>
 

@@ -8,7 +8,8 @@ export function KanbanColumn({
     onAssignBill,
     onRemoveBill,
     onChangeHousing,
-    housingChangeFee,
+    rentSurcharge,
+    baseRent,
 }) {
     const [{ isOver }, drop] = useDrop(() => ({
         accept: 'task',
@@ -59,7 +60,8 @@ export function KanbanColumn({
                             onAssignBill={onAssignBill}
                             onRemoveBill={onRemoveBill}
                             onChangeHousing={onChangeHousing}
-                            housingChangeFee={housingChangeFee}
+                            rentSurcharge={rentSurcharge}
+                            baseRent={baseRent}
                         />
                     ))}
                 </div>
