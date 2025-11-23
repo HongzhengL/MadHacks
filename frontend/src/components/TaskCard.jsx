@@ -54,10 +54,7 @@ export function TaskCard({
       `}
         >
             <div className="flex items-start justify-between mb-2">
-                <div>
-                    <div className="text-gray-800">{task.id}</div>
-                    <div className="text-gray-600">{task.title}</div>
-                </div>
+                <div className="text-gray-800 font-semibold">{task.title}</div>
                 <div className="flex items-center gap-1 text-gray-800">
                     <DollarSign className="size-4" />
                     <span>{displayAmount}</span>

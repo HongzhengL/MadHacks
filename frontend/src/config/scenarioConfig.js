@@ -57,7 +57,7 @@ export const housingOptions = {
     },
     oneBed: {
         key: 'oneBed',
-        label: '1B1B (Live Alone)',
+        label: '1B1B',
         rent: 1600,
         qolDelta: 2,
         description: 'Comfortable solo living, modest QoL boost.',

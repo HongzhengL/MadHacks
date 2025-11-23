@@ -5,6 +5,7 @@ import { KanbanBoard } from './KanbanBoard';
 import { HousingChangeModal } from './HousingChangeModal';
 import { defaultFinanceConfig } from '../config/financeConfig';
 import { housingOptions, difficultyOptions } from '../config/scenarioConfig';
+import { randomTaskRules, randomTaskState } from '../config/randomEvents';
 
 const HOUSING_CHANGE_FEE = 200;
 
@@ -26,9 +27,23 @@ export function FinanceKanban({ config, summary }) {
         if (task.frequency === 2) {
             return period % 2 === 0;
         }
+
         if (task.frequency === -1) {
-            return Math.random() < 0.5;
+            const rule = randomTaskRules[task.id] ?? randomTaskRules.default;
+            const probability = rule?.probability ?? 0.5;
+            const maxPerYear = rule?.maxPerYear;
+
+            if (maxPerYear && randomTaskState.counts[task.id] >= maxPerYear) {
+                return false;
+            }
+
+            const isActive = Math.random() < probability;
+            if (isActive) {
+                randomTaskState.counts[task.id] = (randomTaskState.counts[task.id] ?? 0) + 1;
+            }
+            return isActive;
         }
+
         return true;
     };
 
