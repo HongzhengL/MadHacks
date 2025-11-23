@@ -6,51 +6,54 @@ import { KanbanBoard } from './KanbanBoard';
 const PAYCHECK_AMOUNT = 500; // TODO: Should be configurable
 
 export function FinanceKanban() {
-    const [currentWeek, setCurrentWeek] = useState(1);
-    const [availableAmount, setAvailableAmount] = useState(PAYCHECK_AMOUNT);
+    const [financeState, setFinanceState] = useState({
+        currentWeek: 1,
+        availableAmount: PAYCHECK_AMOUNT,
+        tasks: [
+            {
+                id: 'T1',
+                title: 'Rent Payment',
+                amount: 100,
+                dueWeek: 3,
+                assignedBills: [],
+                status: 'fixed',
+            },
+            {
+                id: 'T2',
+                title: 'Utilities',
+                amount: 50,
+                dueWeek: 2,
+                assignedBills: [],
+                status: 'fixed',
+            },
+            {
+                id: 'T3',
+                title: 'Groceries',
+                amount: 80,
+                dueWeek: 1,
+                assignedBills: [],
+                status: 'variable',
+            },
+            {
+                id: 'T4',
+                title: 'Internet Bill',
+                amount: 60,
+                dueWeek: 2,
+                assignedBills: [],
+                status: 'fixed',
+            },
+            {
+                id: 'T5',
+                title: 'Phone Bill',
+                amount: 40,
+                dueWeek: 1,
+                assignedBills: [],
+                status: 'fixed',
+            },
+        ],
+    });
 
-    const [tasks, setTasks] = useState([
-        {
-            id: 'T1',
-            title: 'Rent Payment',
-            amount: 100,
-            dueWeek: 3,
-            assignedBills: [],
-            status: 'fixed',
-        },
-        {
-            id: 'T2',
-            title: 'Utilities',
-            amount: 50,
-            dueWeek: 2,
-            assignedBills: [],
-            status: 'fixed',
-        },
-        {
-            id: 'T3',
-            title: 'Groceries',
-            amount: 80,
-            dueWeek: 1,
-            assignedBills: [],
-            status: 'variable',
-        },
-        {
-            id: 'T4',
-            title: 'Internet Bill',
-            amount: 60,
-            dueWeek: 2,
-            assignedBills: [],
-            status: 'fixed',
-        },
-        {
-            id: 'T5',
-            title: 'Phone Bill',
-            amount: 40,
-            dueWeek: 1,
-            assignedBills: [],
-            status: 'fixed',
-        },
-    ]);
+    const { currentWeek, availableAmount, tasks } = financeState;
 
     const [availableBills] = useState([
         { id: 'b1', value: 100, type: 'cash' },
@@ -61,85 +64,98 @@ export function FinanceKanban() {
     ]);
 
     const moveTask = (taskId, newStatus) => {
-        setTasks((prevTasks) =>
-            prevTasks.map((task) => (task.id === taskId ? { ...task, status: newStatus } : task))
-        );
+        setFinanceState((prev) => ({
+            ...prev,
+            tasks: prev.tasks.map((task) =>
+                task.id === taskId ? { ...task, status: newStatus } : task
+            ),
+        }));
     };
 
     const assignBillToTask = (billValue, billType, taskId) => {
-        const newBill = {
-            id: `${taskId}-${Date.now()}-${Math.random()}`,
-            value: billValue,
-            type: billType,
-        };
-
-        if (billType === 'cash') {
-            let hasFunds = false;
-
-            setAvailableAmount((prevAmount) => {
-                if (prevAmount < billValue) {
-                    return prevAmount;
-                }
-
-                hasFunds = true;
-                return prevAmount - billValue;
-            });
-
-            if (!hasFunds) {
-                return;
+        setFinanceState((prev) => {
+            if (billType === 'cash' && prev.availableAmount < billValue) {
+                return prev;
             }
-        }
 
-        setTasks((prevTasks) =>
-            prevTasks.map((task) =>
-                task.id === taskId
-                    ? { ...task, assignedBills: [...task.assignedBills, newBill] }
-                    : task
-            )
-        );
-    };
+            let taskFound = false;
+            const newBill = {
+                id: `${taskId}-${Date.now()}-${Math.random()}`,
+                value: billValue,
+                type: billType,
+            };
 
-    const removeBillFromTask = (billId, taskId) => {
-        let refundAmount = 0;
-
-        setTasks((prevTasks) => {
-            let billFound = false;
-
-            const updatedTasks = prevTasks.map((task) => {
+            const updatedTasks = prev.tasks.map((task) => {
                 if (task.id !== taskId) {
                     return task;
                 }
 
-                let removed = false;
+                taskFound = true;
+                return { ...task, assignedBills: [...task.assignedBills, newBill] };
+            });
+
+            if (!taskFound) {
+                return prev;
+            }
+
+            const nextAvailable =
+                billType === 'cash' ? prev.availableAmount - billValue : prev.availableAmount;
+
+            return {
+                ...prev,
+                tasks: updatedTasks,
+                availableAmount: nextAvailable,
+            };
+        });
+    };
+
+    const removeBillFromTask = (billId, taskId) => {
+        setFinanceState((prev) => {
+            let refund = 0;
+            let billRemoved = false;
+
+            const updatedTasks = prev.tasks.map((task) => {
+                if (task.id !== taskId) {
+                    return task;
+                }
+
                 const filteredBills = task.assignedBills.filter((bill) => {
                     if (bill.id !== billId) {
                         return true;
                     }
 
-                    removed = true;
-                    billFound = true;
-                    refundAmount = bill.type === 'cash' ? bill.value : 0;
+                    billRemoved = true;
+                    if (bill.type === 'cash') {
+                        refund += bill.value;
+                    }
                     return false;
                 });
 
-                if (!removed) {
+                if (!billRemoved) {
                     return task;
                 }
 
                 return { ...task, assignedBills: filteredBills };
             });
 
-            return billFound ? updatedTasks : prevTasks;
-        });
+            if (!billRemoved) {
+                return prev;
+            }
 
-        if (refundAmount > 0) {
-            setAvailableAmount((prevAmount) => prevAmount + refundAmount);
-        }
+            return {
+                ...prev,
+                tasks: updatedTasks,
+                availableAmount: prev.availableAmount + refund,
+            };
+        });
     };
 
     const advanceWeek = () => {
-        setCurrentWeek((prevWeek) => prevWeek + 2);
-        setAvailableAmount((prevAmount) => prevAmount + PAYCHECK_AMOUNT);
+        setFinanceState((prev) => ({
+            ...prev,
+            currentWeek: prev.currentWeek + 2,
+            availableAmount: prev.availableAmount + PAYCHECK_AMOUNT,
+        }));
     };
 
     return (
