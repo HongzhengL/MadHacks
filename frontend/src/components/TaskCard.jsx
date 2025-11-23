@@ -2,7 +2,7 @@ import { useDrag, useDrop } from 'react-dnd';
 import { BillCard } from './BillCard';
 import { Calendar, DollarSign } from 'lucide-react';
 
-export function TaskCard({ task, onAssignBill, onRemoveBill }) {
+export function TaskCard({ task, onAssignBill, onRemoveBill, onChangeHousing }) {
     const [{ isDragging }, drag] = useDrag(() => ({
         type: 'task',
         item: { taskId: task.id },
@@ -23,10 +23,19 @@ export function TaskCard({ task, onAssignBill, onRemoveBill }) {
 
     const totalAssigned = task.assignedBills.reduce((sum, bill) => sum + bill.value, 0);
     const isFullyPaid = totalAssigned >= task.amount;
+    const isRentTask = task.category === 'rent' || task.id === 'T1';
 
     return (
         <div
             ref={drag}
+            onContextMenu={
+                isRentTask && onChangeHousing
+                    ? (event) => {
+                          event.preventDefault();
+                          onChangeHousing();
+                      }
+                    : undefined
+            }
             className={`
         bg-yellow-50 border-2 border-yellow-300 rounded-lg p-3 cursor-move
         ${isDragging ? 'opacity-50' : 'opacity-100'}
@@ -46,7 +55,11 @@ export function TaskCard({ task, onAssignBill, onRemoveBill }) {
 
             <div className="flex items-center gap-1 text-gray-600 mb-3">
                 <Calendar className="size-4" />
-                <span>Due Week {task.dueWeek}</span>
+                {isRentTask ? (
+                    <span>Rent bills every 2 rounds</span>
+                ) : (
+                    <span>Due Week {task.dueWeek}</span>
+                )}
             </div>
 
             <div

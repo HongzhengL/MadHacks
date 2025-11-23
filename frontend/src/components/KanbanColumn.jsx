@@ -1,7 +1,15 @@
 import { useDrop } from 'react-dnd';
 import { TaskCard } from './TaskCard';
 
-export function KanbanColumn({ column, tasks, onMoveTask, onAssignBill, onRemoveBill }) {
+export function KanbanColumn({
+    column,
+    tasks,
+    onMoveTask,
+    onAssignBill,
+    onRemoveBill,
+    onChangeHousing,
+    housingChangeFee,
+}) {
     const [{ isOver }, drop] = useDrop(() => ({
         accept: 'task',
         drop: (item) => {
@@ -50,6 +58,8 @@ export function KanbanColumn({ column, tasks, onMoveTask, onAssignBill, onRemove
                             task={task}
                             onAssignBill={onAssignBill}
                             onRemoveBill={onRemoveBill}
+                            onChangeHousing={onChangeHousing}
+                            housingChangeFee={housingChangeFee}
                         />
                     ))}
                 </div>

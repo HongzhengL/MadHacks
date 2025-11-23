@@ -8,7 +8,14 @@ const columns = [
     { id: 'opportunity', title: 'Opportunity', color: 'purple' },
 ];
 
-export function KanbanBoard({ tasks, onMoveTask, onAssignBill, onRemoveBill }) {
+export function KanbanBoard({
+    tasks,
+    onMoveTask,
+    onAssignBill,
+    onRemoveBill,
+    onChangeHousing,
+    housingChangeFee,
+}) {
     return (
         <div className="flex-1 overflow-auto bg-gray-50">
             <div
@@ -29,6 +36,8 @@ export function KanbanBoard({ tasks, onMoveTask, onAssignBill, onRemoveBill }) {
                             onMoveTask={onMoveTask}
                             onAssignBill={onAssignBill}
                             onRemoveBill={onRemoveBill}
+                            onChangeHousing={onChangeHousing}
+                            housingChangeFee={housingChangeFee}
                         />
                     );
                 })}

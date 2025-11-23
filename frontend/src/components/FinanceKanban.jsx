@@ -2,9 +2,13 @@ import { useState } from 'react';
 import { KanbanHeader } from './KanbanHeader';
 import { BillsPool } from './BillsPool';
 import { KanbanBoard } from './KanbanBoard';
+import { HousingChangeModal } from './HousingChangeModal';
 import { defaultFinanceConfig } from '../config/financeConfig';
+import { housingOptions, difficultyOptions } from '../config/scenarioConfig';
 
-export function FinanceKanban({ config }) {
+const HOUSING_CHANGE_FEE = 200;
+
+export function FinanceKanban({ config, summary }) {
     const resolvedConfig = config ?? defaultFinanceConfig;
     const {
         initialWeek = 1,
@@ -39,8 +43,12 @@ export function FinanceKanban({ config }) {
             creditLimit: derivedCreditLimit,
             creditRemaining: startingCreditRemaining,
             tasks: normalizedTasks,
+            roundIndex: 0,
         };
     });
+    const [scenarioSummary, setScenarioSummary] = useState(summary);
+    const [showHousingModal, setShowHousingModal] = useState(false);
+    const [rentSurcharge, setRentSurcharge] = useState(0);
 
     const {
         currentWeek,
@@ -187,12 +195,96 @@ export function FinanceKanban({ config }) {
         });
     };
 
+    const openHousingModal = () => setShowHousingModal(true);
+    const closeHousingModal = () => setShowHousingModal(false);
+
+    const applyHousingChange = (newHousingKey) => {
+        const housing = housingOptions[newHousingKey];
+        if (!housing) {
+            closeHousingModal();
+            return;
+        }
+
+        const nextSurcharge = rentSurcharge + HOUSING_CHANGE_FEE;
+
+        setRentSurcharge(nextSurcharge);
+
+        setFinanceState((prev) => {
+            const updatedTasks = prev.tasks.map((task) => {
+                const isRentTask = task.category === 'rent' || task.id === 'T1';
+                if (!isRentTask) return task;
+                return {
+                    ...task,
+                    amount: housing.rent + nextSurcharge,
+                    title: `Rent (${housing.label})`,
+                };
+            });
+
+            return {
+                ...prev,
+                tasks: updatedTasks,
+            };
+        });
+
+        setScenarioSummary((prevSummary) => {
+            const difficultyKey = prevSummary?.difficultyKey ?? summary?.difficultyKey ?? 'medium';
+            const difficulty = difficultyOptions[difficultyKey] ?? difficultyOptions.medium;
+            const monthlyTakeHome =
+                prevSummary?.monthlyTakeHome ??
+                summary?.monthlyTakeHome ??
+                difficulty.monthlyTakeHome;
+            const rentPercentage = Math.round((housing.rent / monthlyTakeHome) * 100);
+
+            return {
+                ...(prevSummary ?? {}),
+                difficultyKey,
+                housingKey: housing.key,
+                housingLabel: housing.label,
+                rentAmount: housing.rent,
+                rentPercentage,
+                qolBaseline: difficulty.qualityOfLife + housing.qolDelta,
+                housingDescription: housing.description,
+            };
+        });
+
+        closeHousingModal();
+    };
+
     const advanceWeek = () => {
-        setFinanceState((prev) => ({
-            ...prev,
-            currentWeek: prev.currentWeek + 2,
-            availableAmount: prev.availableAmount + paycheckAmount,
-        }));
+        setFinanceState((prev) => {
+            const nextRoundIndex = (prev.roundIndex ?? 0) + 1;
+            const prevPeriod = Math.floor((prev.roundIndex ?? 0) / 2);
+            const nextPeriod = Math.floor(nextRoundIndex / 2);
+
+            let updatedTasks = prev.tasks;
+
+            if (nextPeriod !== prevPeriod) {
+                const baseRent =
+                    scenarioSummary?.rentAmount ??
+                    updatedTasks.find((task) => task.category === 'rent' || task.id === 'T1')
+                        ?.amount ??
+                    0;
+
+                setRentSurcharge(0);
+
+                updatedTasks = prev.tasks.map((task) => {
+                    const isRentTask = task.category === 'rent' || task.id === 'T1';
+                    if (!isRentTask) return task;
+                    return {
+                        ...task,
+                        amount: baseRent,
+                    };
+                });
+            }
+
+            return {
+                ...prev,
+                currentWeek: prev.currentWeek + 2,
+                availableAmount: prev.availableAmount + paycheckAmount,
+                roundIndex: nextRoundIndex,
+                tasks: updatedTasks,
+            };
+        });
     };
 
     const safeCreditRemaining = Math.max(creditRemaining ?? 0, 0);
@@ -207,6 +299,7 @@ export function FinanceKanban({ config }) {
                 availableAmount={availableAmount}
                 creditRemaining={creditRemaining}
                 creditLimit={creditCap}
+                scenarioSummary={scenarioSummary}
                 onAdvanceWeek={advanceWeek}
             />
 
@@ -221,7 +314,19 @@ export function FinanceKanban({ config }) {
                 onMoveTask={moveTask}
                 onAssignBill={assignBillToTask}
                 onRemoveBill={removeBillFromTask}
+                onChangeHousing={openHousingModal}
+                housingChangeFee={HOUSING_CHANGE_FEE}
             />
+
+            {showHousingModal ? (
+                <HousingChangeModal
+                    isOpen
+                    currentHousingKey={scenarioSummary?.housingKey}
+                    monthlyTakeHome={scenarioSummary?.monthlyTakeHome}
+                    onConfirm={applyHousingChange}
+                    onClose={closeHousingModal}
+                />
+            ) : null}
         </div>
     );
 }
